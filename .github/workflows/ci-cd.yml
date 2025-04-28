@@ -35,14 +35,34 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
-    - name: Train and Deploy Model
+    - name: Train Model on Azure ML
       run: |
-        # Here you would add your model training and deployment code
-        # Example: python model/train.py --epochs 10 --batch-size 64
+        # Train the model using Azure ML compute
+        cd model
+        python aml_train.py \
+          --subscription-id ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+          --resource-group mnist-ml-rg \
+          --workspace-name mnist-pytorch-workspace \
+          --compute-name mnist-cluster \
+          --experiment-name mnist-pytorch-experiment \
+          --epochs 10 \
+          --batch-size 64
+        cd ..
+    
+    - name: Deploy Model to ACI
+      run: |
+        # Deploy the model to Azure Container Instances
+        cd model
+        python aml_deploy.py \
+          --subscription-id ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+          --resource-group mnist-ml-rg \
+          --workspace-name mnist-pytorch-workspace \
+          --model-name mnist-pytorch \
+          --service-name mnist-inference-service
+        cd ..
         
-        # After training and deployment, get the endpoint URL
-        # For now we'll use a placeholder - in real scenario you'd get this from Azure ML
-        echo "ACI_ENDPOINT=https://your-deployed-endpoint.azurecontainer.io" >> $GITHUB_ENV
+        # Get the ACI endpoint URL and set it as an environment variable
+        echo "ACI_ENDPOINT=$(python -c 'import json; print(json.load(open("model/endpoint_info.json"))["scoring_uri"])')" >> $GITHUB_ENV
 
   build-and-push-frontend:
     needs: build-and-train
