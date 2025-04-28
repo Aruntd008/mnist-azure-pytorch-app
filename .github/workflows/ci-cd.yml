@@ -43,7 +43,7 @@ jobs:
           --subscription-id ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
           --resource-group mnist-ml-rg \
           --workspace-name mnist-pytorch-workspace \
-          --compute-name mnist-cluster \
+          --compute-name mnist-github-cluster \
           --experiment-name mnist-pytorch-experiment \
           --epochs 10 \
           --batch-size 64
