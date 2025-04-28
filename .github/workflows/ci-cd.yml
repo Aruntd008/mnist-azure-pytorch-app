@@ -54,7 +54,7 @@ jobs:
       with:
         registry: ${{ secrets.JFROG_URL }}
         username: ${{ secrets.JFROG_USERNAME }}
-        password: ${{ secrets.JFROG_PASSWORD }}
+        password: ${{ secrets.JFROG_ACCESS_TOKEN }}
     
     - name: Build and push frontend image
       uses: docker/build-push-action@v5
@@ -62,7 +62,7 @@ jobs:
         context: ./frontend
         push: true
         tags: ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-frontend:latest
-
+ 
   deploy-infrastructure:
     needs: [build-and-train, build-and-push-frontend]
     runs-on: ubuntu-latest
