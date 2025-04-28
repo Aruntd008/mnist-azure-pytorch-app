@@ -1,10 +1,13 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
 env/
+*.so
+.Python
 build/
 develop-eggs/
 dist/
@@ -16,10 +19,41 @@ lib64/
 parts/
 sdist/
 var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-.env
+
+# PyTorch
 *.pt
+*.pth
+
+# Data and model outputs
 data/
 outputs/
+runs/
+mlruns/
+
+# Azure ML
+.azureml/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.lock.hcl
+
+# macOS
+.DS_Store
+
+# JFrog
+jfrog-credentials.json

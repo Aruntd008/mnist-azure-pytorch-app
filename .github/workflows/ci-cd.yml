@@ -1,0 +1,112 @@
+name: CI/CD Pipeline for PyTorch MNIST
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-train:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.8'
+    
+    - name: Install Azure ML SDK
+      run: |
+        python -m pip install --upgrade pip
+        pip install azureml-sdk azureml-core azure-identity
+        pip install -r model/requirements.txt
+    
+    - name: Configure Azure credentials
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Get ACI Endpoint
+      run: |
+        # This is only needed if you're using the Python SDK to deploy
+        # When using the web interface, you'll need to manually set this as a GitHub secret
+        echo "ACI_ENDPOINT=https://your-deployed-endpoint.azurecontainer.io" >> $GITHUB_ENV
+
+  build-and-push-frontend:
+    needs: build-and-train
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    
+    - name: Login to JFrog
+      uses: docker/login-action@v1
+      with:
+        registry: ${{ secrets.JFROG_URL }}
+        username: ${{ secrets.JFROG_USERNAME }}
+        password: ${{ secrets.JFROG_PASSWORD }}
+    
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v2
+      with:
+        context: ./frontend
+        push: true
+        tags: ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-frontend:latest
+
+  deploy-infrastructure:
+    needs: [build-and-train, build-and-push-frontend]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
+    
+    - name: Configure Azure credentials
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Terraform Init
+      run: |
+        cd infrastructure
+        terraform init
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    
+    - name: Terraform Plan
+      run: |
+        cd infrastructure
+        terraform plan -out=tfplan \
+          -var="jfrog_url=${{ secrets.JFROG_URL }}" \
+          -var="jfrog_username=${{ secrets.JFROG_USERNAME }}" \
+          -var="jfrog_password=${{ secrets.JFROG_PASSWORD }}" \
+          -var="jfrog_repo=${{ secrets.JFROG_REPO }}" \
+          -var="api_url=${{ env.ACI_ENDPOINT }}"
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      run: |
+        cd infrastructure
+        terraform apply -auto-approve tfplan
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
