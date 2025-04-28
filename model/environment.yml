@@ -5,11 +5,16 @@ channels:
 dependencies:
   - python=3.10
   - pip:
-    - torch>=2.0.0
+    - torch>=2.0.0,<2.7.0  # Compatible with MLflow
     - torchvision>=0.15.0
     - numpy>=1.24.0
     - pillow>=9.5.0
-    - mlflow>=2.17.0
-    - azure-ai-ml>=1.12.0
-    - azure-identity>=1.15.0
+    - mlflow==2.6.0  # Specific version known to work
+    # Azure ML MLflow integration
+    - azureml-mlflow==1.48.0
+    # Azure ML SDK v2 packages
+    - azure-ai-ml==1.11.0
+    - azure-identity>=1.12.0
+    - inference-schema>=1.5.0
     - scikit-learn>=1.0.0
+    - pyyaml>=6.0
