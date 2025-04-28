@@ -1,10 +1,12 @@
 name: CI/CD Pipeline for PyTorch MNIST
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
 jobs:
   build-and-train:
     runs-on: ubuntu-latest
@@ -33,10 +35,13 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     
-    - name: Get ACI Endpoint
+    - name: Train and Deploy Model
       run: |
-        # This is only needed if you're using the Python SDK to deploy
-        # When using the web interface, you'll need to manually set this as a GitHub secret
+        # Here you would add your model training and deployment code
+        # Example: python model/train.py --epochs 10 --batch-size 64
+        
+        # After training and deployment, get the endpoint URL
+        # For now we'll use a placeholder - in real scenario you'd get this from Azure ML
         echo "ACI_ENDPOINT=https://your-deployed-endpoint.azurecontainer.io" >> $GITHUB_ENV
 
   build-and-push-frontend:
@@ -62,9 +67,33 @@ jobs:
         context: ./frontend
         push: true
         tags: ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-frontend:latest
- 
+
+  build-and-push-api:
+    needs: build-and-train
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to JFrog
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ secrets.JFROG_URL }}
+        username: ${{ secrets.JFROG_USERNAME }}
+        password: ${{ secrets.JFROG_ACCESS_TOKEN }}
+    
+    - name: Build and push API image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./api
+        push: true
+        tags: ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
+
   deploy-infrastructure:
-    needs: [build-and-train, build-and-push-frontend]
+    needs: [build-and-train, build-and-push-frontend, build-and-push-api]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -99,7 +128,7 @@ jobs:
         terraform plan -out=tfplan \
           -var="jfrog_url=${{ secrets.JFROG_URL }}" \
           -var="jfrog_username=${{ secrets.JFROG_USERNAME }}" \
-          -var="jfrog_password=${{ secrets.JFROG_PASSWORD }}" \
+          -var="jfrog_password=${{ secrets.JFROG_ACCESS_TOKEN }}" \
           -var="jfrog_repo=${{ secrets.JFROG_REPO }}" \
           -var="api_url=${{ env.ACI_ENDPOINT }}"
       env:
@@ -118,3 +147,10 @@ jobs:
         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    
+    - name: Output Deployment Information
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      run: |
+        cd infrastructure
+        echo "Frontend URL: $(terraform output -raw frontend_url)"
+        # Store the URL as an artifact or in GitHub environment variables if needed
