@@ -55,7 +55,7 @@ jobs:
           --workspace-name mnist-pytorch-workspace \
           --compute-name mnist-github-cluster \
           --experiment-name mnist-pytorch-experiment \
-          --epochs 10 \
+          --epochs 1 \
           --batch-size 64
         cd ..
 
