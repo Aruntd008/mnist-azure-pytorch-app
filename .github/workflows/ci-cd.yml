@@ -34,16 +34,32 @@ jobs:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-    
-    # Add this new step here
+
     - name: Register Required Resource Providers
       run: |
+        echo "Registering required Azure resource providers..."
         az provider register --namespace Microsoft.MachineLearningServices
         az provider register --namespace Microsoft.ContainerInstance
-        # Wait for registration to complete
-        az provider show -n Microsoft.MachineLearningServices --query "registrationState"
-        az provider show -n Microsoft.ContainerInstance --query "registrationState"
-
+        az provider register --namespace Microsoft.ContainerRegistry
+        az provider register --namespace Microsoft.KeyVault
+        
+        # Wait for registrations to complete (this can take a few minutes)
+        echo "Waiting for Microsoft.MachineLearningServices to register..."
+        az provider show -n Microsoft.MachineLearningServices --query "registrationState" -o tsv
+        until [ "$(az provider show -n Microsoft.MachineLearningServices --query "registrationState" -o tsv)" = "Registered" ]; do
+          echo "Registration in progress, waiting 30 seconds..."
+          sleep 30
+          az provider show -n Microsoft.MachineLearningServices --query "registrationState" -o tsv
+        done
+        
+        echo "Waiting for Microsoft.ContainerInstance to register..."
+        until [ "$(az provider show -n Microsoft.ContainerInstance --query "registrationState" -o tsv)" = "Registered" ]; do
+          echo "Registration in progress, waiting 30 seconds..."
+          sleep 30
+          az provider show -n Microsoft.ContainerInstance --query "registrationState" -o tsv
+        done
+        
+        echo "All required resource providers are now registered."
 
     - name: Train Model on Azure ML
       run: |
@@ -55,7 +71,7 @@ jobs:
           --workspace-name mnist-pytorch-workspace \
           --compute-name mnist-github-cluster \
           --experiment-name mnist-pytorch-experiment \
-          --epochs 1 \
+          --epochs 10 \
           --batch-size 64
         cd ..
 
@@ -74,6 +90,7 @@ jobs:
         # Get the ACI endpoint URL and set it as an environment variable
         echo "ACI_ENDPOINT=$(python -c 'import json; print(json.load(open("model/endpoint_info.json"))["scoring_uri"])')" >> $GITHUB_ENV
 
+  # Rest of your workflow remains unchanged
   build-and-push-frontend:
     needs: build-and-train
     runs-on: ubuntu-latest
