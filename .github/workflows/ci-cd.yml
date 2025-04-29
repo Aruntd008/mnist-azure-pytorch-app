@@ -35,32 +35,6 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Register Required Resource Providers
-      run: |
-        echo "Registering required Azure resource providers..."
-        az provider register --namespace Microsoft.MachineLearningServices
-        az provider register --namespace Microsoft.ContainerInstance
-        az provider register --namespace Microsoft.ContainerRegistry
-        az provider register --namespace Microsoft.KeyVault
-        
-        # Wait for registrations to complete (this can take a few minutes)
-        echo "Waiting for Microsoft.MachineLearningServices to register..."
-        az provider show -n Microsoft.MachineLearningServices --query "registrationState" -o tsv
-        until [ "$(az provider show -n Microsoft.MachineLearningServices --query "registrationState" -o tsv)" = "Registered" ]; do
-          echo "Registration in progress, waiting 30 seconds..."
-          sleep 30
-          az provider show -n Microsoft.MachineLearningServices --query "registrationState" -o tsv
-        done
-        
-        echo "Waiting for Microsoft.ContainerInstance to register..."
-        until [ "$(az provider show -n Microsoft.ContainerInstance --query "registrationState" -o tsv)" = "Registered" ]; do
-          echo "Registration in progress, waiting 30 seconds..."
-          sleep 30
-          az provider show -n Microsoft.ContainerInstance --query "registrationState" -o tsv
-        done
-        
-        echo "All required resource providers are now registered."
-
     - name: Train Model on Azure ML
       run: |
         # Train the model using Azure ML compute
