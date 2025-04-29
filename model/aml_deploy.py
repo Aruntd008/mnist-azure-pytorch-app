@@ -1,48 +1,143 @@
-# Simplified deployment script
 from azure.ai.ml import MLClient
-from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment
-from dotenv import load_dotenv
+from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment, Environment
+from azure.identity import DefaultAzureCredential, ClientSecretCredential
 import os
-from azure.identity import ClientSecretCredential
-from azure.ai.ml import MLClient
+import argparse
+import json
 
-# Load variables from .env
-load_dotenv()
+# Parse command-line arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--subscription-id", required=True)
+parser.add_argument("--resource-group", required=True)
+parser.add_argument("--workspace-name", required=True)
+parser.add_argument("--model-name", default="mnist-pytorch")
+parser.add_argument("--service-name", default="mnist-inference-service")
+args = parser.parse_args()
 
-# Access the environment variables
-credential = ClientSecretCredential(
-    tenant_id=os.getenv("TENANT_ID"),
-    client_id=os.getenv("CLIENT_ID"),
-    client_secret=os.getenv("CLIENT_SECRET"),
+# Authenticate using DefaultAzureCredential (which works with Managed Identity or az login)
+try:
+    credential = DefaultAzureCredential()
+    
+    # Initialize MLClient
+    ml_client = MLClient(
+        credential=credential,
+        subscription_id=args.subscription_id,
+        resource_group_name=args.resource_group,
+        workspace_name=args.workspace_name
+    )
+    print("Successfully authenticated using DefaultAzureCredential")
+except Exception as e:
+    print(f"DefaultAzureCredential failed. Error: {e}")
+    
+    # Fall back to ClientSecretCredential if environment variables are available
+    if all(var in os.environ for var in ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"]):
+        print("Trying ClientSecretCredential...")
+        credential = ClientSecretCredential(
+            tenant_id=os.environ["AZURE_TENANT_ID"],
+            client_id=os.environ["AZURE_CLIENT_ID"],
+            client_secret=os.environ["AZURE_CLIENT_SECRET"]
+        )
+        
+        ml_client = MLClient(
+            credential=credential,
+            subscription_id=args.subscription_id,
+            resource_group_name=args.resource_group,
+            workspace_name=args.workspace_name
+        )
+        print("Successfully authenticated using ClientSecretCredential")
+    else:
+        raise Exception("Could not authenticate to Azure. Please check your credentials.")
+
+# Get the latest version of the model
+model_versions = list(ml_client.models.list(name=args.model_name))
+if not model_versions:
+    raise Exception(f"No model found with name {args.model_name}")
+
+# Sort by creation time to get the latest
+latest_model = sorted(model_versions, key=lambda x: x.creation_context.created_at, reverse=True)[0]
+print(f"Using model {latest_model.name} version {latest_model.version}")
+
+# Create a custom environment instead of using a curated one
+custom_env = Environment(
+    name="pytorch-inference-env",
+    description="Custom environment for MNIST inference",
+    conda_file="../model/environment.yml",  # Use the same environment file as training
+    image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04"
 )
 
-ml_client = MLClient(
-    credential,
-    subscription_id=os.getenv("SUBSCRIPTION_ID"),
-    resource_group_name=os.getenv("RESOURCE_GROUP_NAME"),
-    workspace_name=os.getenv("WORKSPACE_NAME"),
-)
+try:
+    # Check if the environment already exists
+    env = ml_client.environments.get(name="pytorch-inference-env", version="1")
+    print("Using existing environment")
+except Exception:
+    # Create the environment if it doesn't exist
+    print("Creating new environment...")
+    env = ml_client.environments.create_or_update(custom_env)
+    print(f"Created environment {env.name} version {env.version}")
 
-# Get the model
-model = ml_client.models.get(name="mnist-pytorch", version="7")
+# Create a unique endpoint name (endpoint names must be unique within a region)
+import uuid
+unique_suffix = str(uuid.uuid4())[:8]
+endpoint_name = f"{args.service_name}-{unique_suffix}"
 
-# Create a new endpoint
-endpoint_name = "mnist-inference-s"  # Use a different name
+# Create endpoint
 endpoint = ManagedOnlineEndpoint(
     name=endpoint_name,
-    auth_mode="key",
-    description="MNIST inference endpoint"
+    description="MNIST PyTorch inference endpoint",
+    auth_mode="key"
 )
-ml_client.online_endpoints.begin_create_or_update(endpoint).result()
 
-# Create deployment using curated environment
+try:
+    ml_client.online_endpoints.begin_create_or_update(endpoint).result()
+    print(f"Created endpoint {endpoint_name}")
+except Exception as e:
+    print(f"Error creating endpoint: {e}")
+    raise
+
+# Create deployment
 deployment = ManagedOnlineDeployment(
     name="default",
     endpoint_name=endpoint_name,
-    model=model.id,
-    environment="AzureML-PyTorch-1.10-CPU",  # Curated environment
+    model=latest_model.id,
+    environment=env.id,
     instance_type="Standard_DS2_v2",
-    instance_count=1
+    instance_count=1,
+    environment_variables={
+        "AZUREML_ENTRY_SCRIPT": "score.py"
+    }
 )
 
-ml_client.online_deployments.begin_create_or_update(deployment).result()
+try:
+    ml_client.online_deployments.begin_create_or_update(deployment).result()
+    print(f"Created deployment 'default' for endpoint {endpoint_name}")
+except Exception as e:
+    print(f"Error creating deployment: {e}")
+    # Delete the endpoint if deployment fails
+    ml_client.online_endpoints.begin_delete(name=endpoint_name)
+    raise
+
+# Set the deployment as the default for the endpoint
+ml_client.online_endpoints.begin_create_or_update(
+    ManagedOnlineEndpoint(
+        name=endpoint_name,
+        traffic={"default": 100}
+    )
+).result()
+
+# Get endpoint details
+endpoint = ml_client.online_endpoints.get(name=endpoint_name)
+scoring_uri = endpoint.scoring_uri
+
+print(f"Endpoint '{endpoint_name}' deployed successfully!")
+print(f"Scoring URI: {scoring_uri}")
+
+# Save the endpoint information for later use
+endpoint_info = {
+    "endpoint_name": endpoint_name,
+    "scoring_uri": scoring_uri
+}
+
+with open("endpoint_info.json", "w") as f:
+    json.dump(endpoint_info, f)
+
+print("Endpoint information saved to endpoint_info.json")

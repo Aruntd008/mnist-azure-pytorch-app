@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:alpine
 
 WORKDIR /app
 
@@ -15,19 +15,16 @@ COPY . /app/
 # Add model directory to Python path
 ENV PYTHONPATH="/app:${PYTHONPATH}"
 
-# Copy model module
-COPY ../model/model.py /app/model/
+# Copy model module from parent directory
+COPY model.py /app/model/
 
-# The actual model file will be downloaded from Azure ML during startup
-# We'll add a script to handle this
-
-# Create script to download model at startup
+# Create a startup script
 RUN echo '#!/bin/bash\n\
+\n\
+# Check if model file exists\n\
 if [ ! -f /app/model/mnist_pytorch.pt ]; then\n\
-  echo "Downloading model from Azure ML..."\n\
-  # In production, you would add code here to download the model from Azure ML\n\
-  # For now, we\'ll assume the model is mounted or copied in during deployment\n\
-  echo "Model file not found. Using placeholder or mounted model."\n\
+  echo "Model file not found, checking for mounted model..."\n\
+  # Will be mounted at runtime\n\
 fi\n\
 \n\
 # Start the API\n\
