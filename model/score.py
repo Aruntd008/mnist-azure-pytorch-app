@@ -10,14 +10,24 @@ import base64
 import numpy as np
 import sys
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Set up enhanced logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Print environment information for debugging
+logger.info(f"Python version: {sys.version}")
+logger.info(f"PyTorch version: {torch.__version__}")
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info(f"Directory contents: {os.listdir('.')}")
+logger.info(f"AZUREML_MODEL_DIR: {os.getenv('AZUREML_MODEL_DIR', 'Not set')}")
+if os.getenv('AZUREML_MODEL_DIR'):
+    logger.info(f"Model directory contents: {os.listdir(os.getenv('AZUREML_MODEL_DIR'))}")
 
 # Add the current directory to sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
+    logger.info(f"Added {current_dir} to sys.path")
 
 # Import the model class
 try:
@@ -77,6 +87,21 @@ def init():
             os.path.join(os.getenv('AZUREML_MODEL_DIR', ''), 'model/mnist_pytorch.pt')
         ]
         
+        # If AZUREML_MODEL_DIR is set, check for all files in that directory
+        if os.getenv('AZUREML_MODEL_DIR'):
+            model_dir = os.getenv('AZUREML_MODEL_DIR')
+            logger.info(f"Listing all files in AZUREML_MODEL_DIR and subdirectories:")
+            for root, dirs, files in os.walk(model_dir):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    logger.info(f"  {full_path}")
+                    if file.endswith('.pt') or file.endswith('.pth') or 'model' in file:
+                        possible_locations.append(full_path)
+        
+        # Log all possible locations and whether they exist
+        for loc in possible_locations:
+            logger.info(f"Checking model location: {loc}, exists: {os.path.exists(loc)}")
+        
         model_path = None
         for loc in possible_locations:
             if os.path.exists(loc):
@@ -89,19 +114,26 @@ def init():
             mlflow_model_dir = os.getenv('AZUREML_MODEL_DIR', '')
             if os.path.exists(os.path.join(mlflow_model_dir, 'MLmodel')):
                 import mlflow.pytorch
+                logger.info(f"Attempting to load MLflow model from {mlflow_model_dir}")
                 model = mlflow.pytorch.load_model(mlflow_model_dir)
                 logger.info(f"Loaded MLflow model from {mlflow_model_dir}")
                 return
             else:
-                raise FileNotFoundError(f"Model file not found in any of these locations: {possible_locations}")
+                error_msg = f"Model file not found in any of these locations: {possible_locations}"
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
         
         # Load the model
+        logger.info(f"Initializing MNISTModel")
         model = MNISTModel()
+        logger.info(f"Loading model from {model_path}")
         model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
         model.eval()
         logger.info("Model loaded successfully")
     except Exception as e:
         logger.error(f"Error loading model: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise
 
 # Run inference on input data
@@ -110,16 +142,20 @@ def run(raw_data):
         logger.info("Starting inference")
         # Parse the input data
         inputs = json.loads(raw_data)
+        logger.info(f"Input keys: {inputs.keys()}")
         
         # Handle different input formats
         if 'data' in inputs:
             # Base64 encoded image
             img_bytes = base64.b64decode(inputs['data'])
             image = Image.open(io.BytesIO(img_bytes)).convert('L')
+            logger.info("Successfully decoded base64 image")
         elif 'url' in inputs:
             # URL to an image (not implemented in this example)
+            logger.error("URL-based inference not implemented")
             raise NotImplementedError("URL-based inference not implemented")
         else:
+            logger.error(f"Invalid input format. Available keys: {list(inputs.keys())}")
             raise ValueError("Input must contain either 'data' (base64 encoded image) or 'url'")
         
         # Preprocess the image
@@ -134,6 +170,7 @@ def run(raw_data):
         
         # Get prediction
         with torch.no_grad():
+            logger.info("Running model inference")
             output = model(image_tensor)
             probabilities = F.softmax(output, dim=1)[0]
             predicted_class = torch.argmax(probabilities).item()
@@ -150,4 +187,6 @@ def run(raw_data):
         return json.dumps(result)
     except Exception as e:
         logger.error(f"Error during inference: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return json.dumps({"error": str(e)})

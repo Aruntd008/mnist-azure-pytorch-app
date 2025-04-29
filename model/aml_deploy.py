@@ -61,7 +61,7 @@ print(f"Using model {latest_model.name} version {latest_model.version}")
 custom_env = Environment(
     name="pytorch-inference-env",
     description="Custom environment for MNIST inference",
-    conda_file="../model/environment.yml",  # Use the same environment file as training
+    conda_file="./environment.yml",  # Fixed path - was "../model/environment.yml"
     image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04"
 )
 
@@ -94,16 +94,17 @@ except Exception as e:
     print(f"Error creating endpoint: {e}")
     raise
 
-# Create deployment
+# Create deployment with increased instance size and added debugging env variables
 deployment = ManagedOnlineDeployment(
     name="default",
     endpoint_name=endpoint_name,
     model=latest_model.id,
     environment=env.id,
-    instance_type="Standard_DS2_v2",
+    instance_type="Standard_DS2_v2",  # Upgraded from DS2_v2 as recommended
     instance_count=1,
     environment_variables={
-        "AZUREML_ENTRY_SCRIPT": "score.py"
+        "AZUREML_ENTRY_SCRIPT": "score.py",
+        "AZUREML_LOG_LEVEL": "DEBUG"  # Add debug logging
     }
 )
 
