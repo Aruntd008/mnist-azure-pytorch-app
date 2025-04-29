@@ -1,97 +1,48 @@
-import json
-import argparse
+# Simplified deployment script
 from azure.ai.ml import MLClient
-from azure.ai.ml.entities import (
-    ManagedOnlineEndpoint,
-    ManagedOnlineDeployment,
-    Environment,
-    CodeConfiguration
+from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment
+from dotenv import load_dotenv
+import os
+from azure.identity import ClientSecretCredential
+from azure.ai.ml import MLClient
+
+# Load variables from .env
+load_dotenv()
+
+# Access the environment variables
+credential = ClientSecretCredential(
+    tenant_id=os.getenv("TENANT_ID"),
+    client_id=os.getenv("CLIENT_ID"),
+    client_secret=os.getenv("CLIENT_SECRET"),
 )
-from azure.identity import DefaultAzureCredential
 
-# Parse arguments
-parser = argparse.ArgumentParser(description='Deploy MNIST model to ACI')
-parser.add_argument('--subscription-id', type=str, required=True, help='Azure subscription ID')
-parser.add_argument('--resource-group', type=str, required=True, help='Azure resource group')
-parser.add_argument('--workspace-name', type=str, required=True, help='Azure ML workspace name')
-parser.add_argument('--model-name', type=str, required=True, help='Registered model name')
-parser.add_argument('--service-name', type=str, required=True, help='Deployment service name')
-parser.add_argument('--cpu-cores', type=float, default=1.0, help='Number of CPU cores')
-parser.add_argument('--memory-gb', type=float, default=1.0, help='Memory in GB')
-
-args = parser.parse_args()
-
-# Connect to workspace using Azure ML SDK v2
 ml_client = MLClient(
-    DefaultAzureCredential(),
-    args.subscription_id,
-    args.resource_group,
-    args.workspace_name
+    credential,
+    subscription_id=os.getenv("SUBSCRIPTION_ID"),
+    resource_group_name=os.getenv("RESOURCE_GROUP_NAME"),
+    workspace_name=os.getenv("WORKSPACE_NAME"),
 )
-print(f"Connected to workspace {ml_client.workspace_name}")
 
-# Get the latest version of the registered model
-model_versions = list(ml_client.models.list(name=args.model_name))
-if not model_versions:
-    raise Exception(f"No model with name {args.model_name} found in workspace")
+# Get the model
+model = ml_client.models.get(name="mnist-pytorch", version="7")
 
-latest_model = model_versions[0]
-print(f"Model {latest_model.name} (version {latest_model.version}) loaded")
-
-# Create an online endpoint
+# Create a new endpoint
+endpoint_name = "mnist-inference-s"  # Use a different name
 endpoint = ManagedOnlineEndpoint(
-    name=args.service_name,
-    description="MNIST digit classifier endpoint",
-    auth_mode="key"
+    name=endpoint_name,
+    auth_mode="key",
+    description="MNIST inference endpoint"
 )
+ml_client.online_endpoints.begin_create_or_update(endpoint).result()
 
-# Create or update the endpoint
-endpoint = ml_client.online_endpoints.begin_create_or_update(endpoint).result()
-print(f"Endpoint {endpoint.name} created or updated")
-
-# Create an environment for inference
-environment = Environment(
-    name="pytorch-inference-env",
-    description="Environment for PyTorch inference",
-    conda_file="environment.yml",
-    image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04"
-)
-
-# Create the deployment
+# Create deployment using curated environment
 deployment = ManagedOnlineDeployment(
     name="default",
-    endpoint_name=args.service_name,
-    model=latest_model.id,
-    environment=environment,
-    code_configuration=CodeConfiguration(
-        code=".",
-        scoring_script="score.py"
-    ),
+    endpoint_name=endpoint_name,
+    model=model.id,
+    environment="AzureML-PyTorch-1.10-CPU",  # Curated environment
     instance_type="Standard_DS2_v2",
     instance_count=1
 )
 
-# Create or update the deployment
-deployment = ml_client.online_deployments.begin_create_or_update(deployment).result()
-print(f"Deployment {deployment.name} created or updated")
-
-# Set the deployment as the default for the endpoint
-endpoint.traffic = {"default": 100}
-ml_client.online_endpoints.begin_create_or_update(endpoint).result()
-
-# Get the scoring endpoint
-scoring_uri = endpoint.scoring_uri
-print(f"Service deployed successfully. Scoring URI: {scoring_uri}")
-
-# Save endpoint information to a file
-endpoint_info = {
-    "scoring_uri": scoring_uri,
-    "service_name": endpoint.name,
-    "model_name": latest_model.name,
-    "model_version": latest_model.version
-}
-
-with open("endpoint_info.json", "w") as f:
-    json.dump(endpoint_info, f)
-
-print(f"Endpoint information saved to endpoint_info.json")
+ml_client.online_deployments.begin_create_or_update(deployment).result()
