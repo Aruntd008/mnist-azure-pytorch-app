@@ -45,18 +45,6 @@ endpoint = ManagedOnlineEndpoint(
     auth_mode="key"
 )
 
-# Check if the endpoint already exists and delete it if necessary
-try:
-    # Check if endpoint exists
-    existing_endpoint = ml_client.online_endpoints.get(name=args.service_name)
-    if existing_endpoint:
-        print(f"Found existing endpoint {args.service_name}. Deleting it first...")
-        ml_client.online_endpoints.begin_delete(name=args.service_name).wait()
-        print(f"Endpoint {args.service_name} deleted successfully.")
-except Exception as e:
-    # If the endpoint doesn't exist or can't be accessed, we can continue
-    print(f"No existing endpoint found or unable to access it: {e}")
-
 # Create or update the endpoint
 endpoint = ml_client.online_endpoints.begin_create_or_update(endpoint).result()
 print(f"Endpoint {endpoint.name} created or updated")
