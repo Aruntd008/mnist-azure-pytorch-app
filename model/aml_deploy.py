@@ -100,7 +100,7 @@ deployment = ManagedOnlineDeployment(
     endpoint_name=endpoint_name,
     model=latest_model.id,
     environment=env.id,
-    instance_type="Standard_DS2_v2",  # Upgraded from DS2_v2 as recommended
+    instance_type="Standard_E4s_v3",  # Upgraded from DS2_v2 as recommended
     instance_count=1,
     environment_variables={
         "AZUREML_ENTRY_SCRIPT": "score.py",
