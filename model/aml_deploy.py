@@ -1,5 +1,5 @@
 from azure.ai.ml import MLClient
-from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment, Environment
+from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment, Environment, CodeConfiguration
 from azure.identity import DefaultAzureCredential, ClientSecretCredential
 import os
 import argparse
@@ -67,7 +67,7 @@ custom_env = Environment(
 
 try:
     # Check if the environment already exists
-    env = ml_client.environments.get(name="pytorch-inference-env", version="1")
+    env = ml_client.environments.get(name="pytorch-inference-env")
     print("Using existing environment")
 except Exception:
     # Create the environment if it doesn't exist
@@ -93,7 +93,7 @@ try:
 except Exception as e:
     print(f"Error creating endpoint: {e}")
     raise
-
+print('model name',latest_model.id)
 # Create deployment with increased instance size and added debugging env variables
 deployment = ManagedOnlineDeployment(
     name="default",
@@ -102,6 +102,10 @@ deployment = ManagedOnlineDeployment(
     environment=env.id,
     instance_type="Standard_E4s_v3",  # Upgraded from DS2_v2 as recommended
     instance_count=1,
+    code_configuration=CodeConfiguration(
+        code="./",  # Use current directory
+        scoring_script="score.py"
+    ),
     environment_variables={
         "AZUREML_ENTRY_SCRIPT": "score.py",
         "AZUREML_LOG_LEVEL": "DEBUG"  # Add debug logging
