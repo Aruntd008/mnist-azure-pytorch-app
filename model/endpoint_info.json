@@ -1,0 +1,1 @@
+{"endpoint_name": "mnist-inference-service-3640e4f2", "scoring_uri": "https://mnist-inference-service-3640e4f2.eastus.inference.ml.azure.com/score"}

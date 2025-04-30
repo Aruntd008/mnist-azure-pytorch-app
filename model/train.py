@@ -158,6 +158,7 @@ def main():
                         'numpy>=1.24.0',
                         'pillow>=9.5.0',
                         'scikit-learn>=1.0.0',
+                        'azureml-inference-server-http>=0.7.0',  # Add this package
                     ]
                 }
             ],

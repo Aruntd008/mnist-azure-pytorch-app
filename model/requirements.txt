@@ -10,3 +10,4 @@ scikit-learn>=1.0.0
 fastapi>=0.95.0
 uvicorn>=0.22.0
 python-multipart>=0.0.18
+azureml-inference-server-http>=0.7.0  # Add this package
