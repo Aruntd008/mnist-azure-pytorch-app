@@ -3,11 +3,11 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "mnist" {
-  name     = "mnist-classification-rg"
+  name     = "mnist-classification-terraform-rg"  # Changed name to avoid conflict
   location = "East US"
 }
 
-# Use the newer service_plan resource instead of app_service_plan
+# Use the newer service_plan resource
 resource "azurerm_service_plan" "mnist" {
   name                = "mnist-service-plan"
   location            = azurerm_resource_group.mnist.location
@@ -16,52 +16,56 @@ resource "azurerm_service_plan" "mnist" {
   sku_name            = "F1"  # Free tier
 }
 
-# Create App Service for API
-resource "azurerm_app_service" "mnist_api" {
+# Create Linux Web App for API using the newer resource
+resource "azurerm_linux_web_app" "mnist_api" {
   name                = "mnist-pytorch-api"
   location            = azurerm_resource_group.mnist.location
   resource_group_name = azurerm_resource_group.mnist.name
-  app_service_plan_id = azurerm_service_plan.mnist.id  # Updated reference
-
+  service_plan_id     = azurerm_service_plan.mnist.id
+  
   site_config {
-    linux_fx_version = "DOCKER|${var.jfrog_url}/${var.jfrog_repo}/mnist-api:latest"
-    always_on        = false  # Free tier doesn't support always_on
+    application_stack {
+      docker_image_name     = "${var.jfrog_url}/${var.jfrog_repo}/mnist-api:latest"
+      docker_registry_url   = "https://${var.jfrog_url}"
+      docker_registry_username = var.jfrog_username
+      docker_registry_password = var.jfrog_password
+    }
+    always_on = false  # Free tier doesn't support always_on
   }
 
   app_settings = {
     "WEBSITES_ENABLE_APP_SERVICE_STORAGE" = "false"
-    "DOCKER_REGISTRY_SERVER_URL"          = "https://${var.jfrog_url}"
-    "DOCKER_REGISTRY_SERVER_USERNAME"     = var.jfrog_username
-    "DOCKER_REGISTRY_SERVER_PASSWORD"     = var.jfrog_password
     "AZURE_ML_ENDPOINT"                   = var.api_url
   }
 }
 
-# Create App Service for frontend
-resource "azurerm_app_service" "mnist_frontend" {
+# Create Linux Web App for frontend using the newer resource
+resource "azurerm_linux_web_app" "mnist_frontend" {
   name                = "mnist-pytorch-frontend"
   location            = azurerm_resource_group.mnist.location
   resource_group_name = azurerm_resource_group.mnist.name
-  app_service_plan_id = azurerm_service_plan.mnist.id  # Updated reference
-
+  service_plan_id     = azurerm_service_plan.mnist.id
+  
   site_config {
-    linux_fx_version = "DOCKER|${var.jfrog_url}/${var.jfrog_repo}/mnist-frontend:latest"
-    always_on        = false  # Free tier doesn't support always_on
+    application_stack {
+      docker_image_name     = "${var.jfrog_url}/${var.jfrog_repo}/mnist-frontend:latest"
+      docker_registry_url   = "https://${var.jfrog_url}"
+      docker_registry_username = var.jfrog_username
+      docker_registry_password = var.jfrog_password
+    }
+    always_on = false  # Free tier doesn't support always_on
   }
 
   app_settings = {
     "WEBSITES_ENABLE_APP_SERVICE_STORAGE" = "false"
-    "DOCKER_REGISTRY_SERVER_URL"          = "https://${var.jfrog_url}"
-    "DOCKER_REGISTRY_SERVER_USERNAME"     = var.jfrog_username
-    "DOCKER_REGISTRY_SERVER_PASSWORD"     = var.jfrog_password
-    "API_URL"                             = "https://${azurerm_app_service.mnist_api.default_site_hostname}"
+    "API_URL"                             = "https://${azurerm_linux_web_app.mnist_api.default_hostname}"
   }
 }
 
 output "api_url" {
-  value = "https://${azurerm_app_service.mnist_api.default_site_hostname}"
+  value = "https://${azurerm_linux_web_app.mnist_api.default_hostname}"
 }
 
 output "frontend_url" {
-  value = "https://${azurerm_app_service.mnist_frontend.default_site_hostname}"
+  value = "https://${azurerm_linux_web_app.mnist_frontend.default_hostname}"
 }
