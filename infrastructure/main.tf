@@ -7,18 +7,13 @@ resource "azurerm_resource_group" "mnist" {
   location = "East US"
 }
 
-# Create App Service Plan
-resource "azurerm_app_service_plan" "mnist" {
-  name                = "mnist-app-service-plan"
+# Use the newer service_plan resource instead of app_service_plan
+resource "azurerm_service_plan" "mnist" {
+  name                = "mnist-service-plan"
   location            = azurerm_resource_group.mnist.location
   resource_group_name = azurerm_resource_group.mnist.name
-  kind                = "Linux"
-  reserved            = true
-
-  sku {
-    tier = "Basic"
-    size = "B1"
-  }
+  os_type             = "Linux"
+  sku_name            = "F1"  # Free tier
 }
 
 # Create App Service for API
@@ -26,11 +21,11 @@ resource "azurerm_app_service" "mnist_api" {
   name                = "mnist-pytorch-api"
   location            = azurerm_resource_group.mnist.location
   resource_group_name = azurerm_resource_group.mnist.name
-  app_service_plan_id = azurerm_app_service_plan.mnist.id
+  app_service_plan_id = azurerm_service_plan.mnist.id  # Updated reference
 
   site_config {
     linux_fx_version = "DOCKER|${var.jfrog_url}/${var.jfrog_repo}/mnist-api:latest"
-    always_on        = true
+    always_on        = false  # Free tier doesn't support always_on
   }
 
   app_settings = {
@@ -47,11 +42,11 @@ resource "azurerm_app_service" "mnist_frontend" {
   name                = "mnist-pytorch-frontend"
   location            = azurerm_resource_group.mnist.location
   resource_group_name = azurerm_resource_group.mnist.name
-  app_service_plan_id = azurerm_app_service_plan.mnist.id
+  app_service_plan_id = azurerm_service_plan.mnist.id  # Updated reference
 
   site_config {
     linux_fx_version = "DOCKER|${var.jfrog_url}/${var.jfrog_repo}/mnist-frontend:latest"
-    always_on        = true
+    always_on        = false  # Free tier doesn't support always_on
   }
 
   app_settings = {
