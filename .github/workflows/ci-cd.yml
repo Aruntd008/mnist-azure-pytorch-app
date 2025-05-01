@@ -52,20 +52,20 @@ jobs:
     #       --batch-size 64
     #     cd ..
 
-    - name: Deploy Model to ACI
-      run: |
-        # Deploy the model to Azure Container Instances
-        cd model
-        python aml_deploy.py \
-          --subscription-id ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
-          --resource-group mnist-ml-rg \
-          --workspace-name mnist-pytorch-workspace \
-          --model-name mnist-pytorch \
-          --service-name mnist-inference-service
-        cd ..
+    # - name: Deploy Model to ACI
+    #   run: |
+    #     # Deploy the model to Azure Container Instances
+    #     cd model
+    #     python aml_deploy.py \
+    #       --subscription-id ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+    #       --resource-group mnist-ml-rg \
+    #       --workspace-name mnist-pytorch-workspace \
+    #       --model-name mnist-pytorch \
+    #       --service-name mnist-inference-service
+    #     cd ..
 
-        # Get the ACI endpoint URL and set it as an environment variable
-        echo "ACI_ENDPOINT=$(python -c 'import json; print(json.load(open("model/endpoint_info.json"))["scoring_uri"])')" >> $GITHUB_ENV
+    #     # Get the ACI endpoint URL and set it as an environment variable
+    #     echo "ACI_ENDPOINT=$(python -c 'import json; print(json.load(open("model/endpoint_info.json"))["scoring_uri"])')" >> $GITHUB_ENV
 
     # New step to set the output variable for other jobs
     - name: Set outputs
