@@ -16,7 +16,9 @@ COPY . /app/
 ENV PYTHONPATH="/app:${PYTHONPATH}"
 
 # Copy model module from parent directory
-COPY model.py /app/model/
+COPY ../model/model.py /app/model/
+
+VOLUME /app/model
 
 # Create a startup script
 RUN echo '#!/bin/bash\n\

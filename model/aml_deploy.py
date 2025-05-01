@@ -117,7 +117,7 @@ try:
     print(f"Created deployment 'default' for endpoint {endpoint_name}")
 except Exception as e:
     print(f"Error creating deployment: {e}")
-    # Delete the endpoint if deployment fails
+    # Delete the endpoint if deployment fails   
     ml_client.online_endpoints.begin_delete(name=endpoint_name)
     raise
 
