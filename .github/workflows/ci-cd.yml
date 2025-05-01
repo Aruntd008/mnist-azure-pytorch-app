@@ -73,7 +73,6 @@ jobs:
       run: |
         echo "aci_endpoint=$(python -c 'import json; print(json.load(open("model/endpoint_info.json"))["scoring_uri"])')" >> $GITHUB_OUTPUT
 
-  # Rest of your workflow remains unchanged
   build-and-push-frontend:
     needs: build-and-train
     runs-on: ubuntu-latest
@@ -127,7 +126,9 @@ jobs:
       with:
         context: ./api
         push: true
-        tags: ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
+        tags: |
+          ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-api:${{ github.run_number }}
+          ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
 
   deploy-infrastructure:
     needs: [build-and-train, build-and-push-frontend, build-and-push-api]
@@ -190,4 +191,4 @@ jobs:
       run: |
         cd infrastructure
         echo "Frontend URL: $(terraform output -raw frontend_url)"
-        # Store the URL as an artifact or in GitHub environment variables if needed
+        echo "API URL: $(terraform output -raw api_url)"

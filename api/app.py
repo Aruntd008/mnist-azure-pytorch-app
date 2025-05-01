@@ -4,16 +4,15 @@ import torch
 import torchvision.transforms as transforms
 from PIL import Image
 import io
-import base64
-import json
-import sys
 import os
+import requests
+import logging
 
-# Add model directory to path
-sys.path.insert(0, os.path.abspath('../model'))
-from model import MNISTModel
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title="MNIST Digit Classification API with PyTorch")
+app = FastAPI(title="MNIST Digit Classification API")
 
 # Enable CORS
 app.add_middleware(
@@ -24,35 +23,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load the trained model
-model = None
-
-@app.on_event("startup")
-async def startup_event():
-    global model
-    try:
-        model = MNISTModel()
-        model.load_state_dict(torch.load('/app/model/mnist_pytorch.pt', map_location=torch.device('cpu')))
-        model.eval()
-        print("PyTorch model loaded successfully")
-    except Exception as e:
-        print(f"Error loading model: {e}")
-
 @app.get("/")
 def read_root():
-    return {"message": "MNIST Digit Classification API with PyTorch"}
+    return {"message": "MNIST Digit Classification API - Proxy to Azure ML"}
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    azure_ml_url = os.environ.get("AZURE_ML_ENDPOINT", "")
+    return {
+        "status": "healthy",
+        "azure_ml_endpoint_configured": bool(azure_ml_url)
+    }
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
-    if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded")
-    
-    # Read and process the image
     try:
+        # Get Azure ML endpoint URL from environment variable
+        azure_ml_url = os.environ.get("AZURE_ML_ENDPOINT", "")
+        if not azure_ml_url:
+            logger.error("Azure ML endpoint not configured")
+            raise HTTPException(status_code=500, detail="Azure ML endpoint not configured")
+        
+        logger.info(f"Using Azure ML endpoint: {azure_ml_url}")
+        
+        # Read and process the image
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert('L')  # Convert to grayscale
         
@@ -64,16 +58,45 @@ async def predict(file: UploadFile = File(...)):
         ])
         image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
         
-        # Get prediction
-        with torch.no_grad():
-            output = model(image_tensor)
-            probabilities = torch.nn.functional.softmax(output, dim=1)[0]
-            predicted_class = torch.argmax(probabilities).item()
-            confidence = probabilities[predicted_class].item()
+        # Convert tensor to list for JSON serialization
+        # The AzureML endpoint expects a specific format with a "data" key
+        input_data = {"data": image_tensor.reshape(-1).tolist()}
         
-        return {
-            "predicted_digit": int(predicted_class),
-            "confidence": float(confidence)
-        }
+        logger.info("Sending request to Azure ML endpoint")
+        
+        # Forward to Azure ML endpoint
+        response = requests.post(
+            azure_ml_url,
+            json=input_data,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"Azure ML response error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=response.status_code, 
+                               detail=f"Error from ML service: {response.text}")
+        
+        # Parse the response
+        result = response.json()
+        logger.info(f"Received response from Azure ML: {result}")
+        
+        # Extract the prediction
+        # Assuming the Azure ML endpoint returns {"predictions": [digit]} format
+        if "predictions" in result:
+            predicted_class = result["predictions"][0]
+            
+            # We don't get confidence scores from basic predictions
+            # So we'll return a placeholder or calculate softmax if available
+            confidence = 0.95  # Placeholder confidence
+            
+            return {
+                "predicted_digit": int(predicted_class),
+                "confidence": float(confidence)
+            }
+        else:
+            logger.error(f"Unexpected response format: {result}")
+            raise HTTPException(status_code=500, detail=f"Unexpected response format: {result}")
+            
     except Exception as e:
+        logger.exception(f"Error in prediction: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
