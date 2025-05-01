@@ -74,116 +74,116 @@ jobs:
       run: |
         echo "aci_endpoint=$(python -c 'import json; print(json.load(open("model/endpoint_info.json"))["scoring_uri"])')" >> $GITHUB_OUTPUT
 
-  build-and-push-frontend:
-    needs: build-and-train
-    runs-on: ubuntu-latest
+  # build-and-push-frontend:
+  #   needs: build-and-train
+  #   runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v4
+  #   steps:
+  #   - uses: actions/checkout@v4
 
-    # Prepare the JFrog URLs for different purposes
-    - name: Set JFrog URLs
-      id: set-jfrog-urls
-      run: |
-        # Extract the JFrog URL
-        JFROG_URL="${{ secrets.JFROG_URL }}"
+  #   # Prepare the JFrog URLs for different purposes
+  #   - name: Set JFrog URLs
+  #     id: set-jfrog-urls
+  #     run: |
+  #       # Extract the JFrog URL
+  #       JFROG_URL="${{ secrets.JFROG_URL }}"
         
-        # For API connections, ensure URL has https:// prefix
-        if [[ $JFROG_URL != http://* ]] && [[ $JFROG_URL != https://* ]]; then
-          JFROG_URL_WITH_SCHEME="https://$JFROG_URL"
-        else
-          JFROG_URL_WITH_SCHEME="$JFROG_URL"
-        fi
+  #       # For API connections, ensure URL has https:// prefix
+  #       if [[ $JFROG_URL != http://* ]] && [[ $JFROG_URL != https://* ]]; then
+  #         JFROG_URL_WITH_SCHEME="https://$JFROG_URL"
+  #       else
+  #         JFROG_URL_WITH_SCHEME="$JFROG_URL"
+  #       fi
         
-        # For Docker tags, we need the URL without the scheme
-        JFROG_URL_NO_SCHEME=$(echo "$JFROG_URL_WITH_SCHEME" | sed 's|^https://||' | sed 's|^http://||')
+  #       # For Docker tags, we need the URL without the scheme
+  #       JFROG_URL_NO_SCHEME=$(echo "$JFROG_URL_WITH_SCHEME" | sed 's|^https://||' | sed 's|^http://||')
         
-        echo "JFROG_URL_WITH_SCHEME=$JFROG_URL_WITH_SCHEME" >> $GITHUB_ENV
-        echo "JFROG_URL_NO_SCHEME=$JFROG_URL_NO_SCHEME" >> $GITHUB_ENV
+  #       echo "JFROG_URL_WITH_SCHEME=$JFROG_URL_WITH_SCHEME" >> $GITHUB_ENV
+  #       echo "JFROG_URL_NO_SCHEME=$JFROG_URL_NO_SCHEME" >> $GITHUB_ENV
         
-        echo "URLs configured:"
-        echo "  With scheme (for API): $JFROG_URL_WITH_SCHEME"
-        echo "  Without scheme (for Docker tags): $JFROG_URL_NO_SCHEME"
+  #       echo "URLs configured:"
+  #       echo "  With scheme (for API): $JFROG_URL_WITH_SCHEME"
+  #       echo "  Without scheme (for Docker tags): $JFROG_URL_NO_SCHEME"
 
-    - name: Setup JFrog CLI
-      uses: jfrog/setup-jfrog-cli@v4
-      env:
-        JF_URL: ${{ env.JFROG_URL_WITH_SCHEME }}
-        JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
+  #   - name: Setup JFrog CLI
+  #     uses: jfrog/setup-jfrog-cli@v4
+  #     env:
+  #       JF_URL: ${{ env.JFROG_URL_WITH_SCHEME }}
+  #       JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
 
-    - name: Build, Tag and Push Frontend Image
-      env:
-        IMAGE_NAME: ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-frontend:${{ github.run_number }}
-        LATEST_TAG: ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-frontend:latest
-      run: |
-        # Print the repository being used (masked for security)
-        echo "Building and pushing to repository: ${{ secrets.JFROG_REPO }}"
-        echo "Image tags:"
-        echo "  $IMAGE_NAME"
-        echo "  $LATEST_TAG"
+  #   - name: Build, Tag and Push Frontend Image
+  #     env:
+  #       IMAGE_NAME: ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-frontend:${{ github.run_number }}
+  #       LATEST_TAG: ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-frontend:latest
+  #     run: |
+  #       # Print the repository being used (masked for security)
+  #       echo "Building and pushing to repository: ${{ secrets.JFROG_REPO }}"
+  #       echo "Image tags:"
+  #       echo "  $IMAGE_NAME"
+  #       echo "  $LATEST_TAG"
         
-        # Build and push the image
-        jf docker build -t $IMAGE_NAME -t $LATEST_TAG ./frontend
-        jf docker push $IMAGE_NAME
-        jf docker push $LATEST_TAG
+  #       # Build and push the image
+  #       jf docker build -t $IMAGE_NAME -t $LATEST_TAG ./frontend
+  #       jf docker push $IMAGE_NAME
+  #       jf docker push $LATEST_TAG
 
-    - name: Publish Build Info
-      env:
-        JFROG_CLI_BUILD_NAME: mnist-frontend-build
-        JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}
-      run: |
-        jf rt build-collect-env
-        jf rt build-add-git
-        jf rt build-publish
+  #   - name: Publish Build Info
+  #     env:
+  #       JFROG_CLI_BUILD_NAME: mnist-frontend-build
+  #       JFROG_CLI_BUILD_NUMBER: ${{ github.run_number }}
+  #     run: |
+  #       jf rt build-collect-env
+  #       jf rt build-add-git
+  #       jf rt build-publish
 
-  build-and-push-api:
-    needs: build-and-train
-    runs-on: ubuntu-latest
+  # build-and-push-api:
+  #   needs: build-and-train
+  #   runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v4
+  #   steps:
+  #   - uses: actions/checkout@v4
 
-    # Prepare the JFrog URLs for different purposes
-    - name: Set JFrog URLs
-      id: set-jfrog-urls
-      run: |
-        # Extract the JFrog URL
-        JFROG_URL="${{ secrets.JFROG_URL }}"
+  #   # Prepare the JFrog URLs for different purposes
+  #   - name: Set JFrog URLs
+  #     id: set-jfrog-urls
+  #     run: |
+  #       # Extract the JFrog URL
+  #       JFROG_URL="${{ secrets.JFROG_URL }}"
         
-        # For API connections, ensure URL has https:// prefix
-        if [[ $JFROG_URL != http://* ]] && [[ $JFROG_URL != https://* ]]; then
-          JFROG_URL_WITH_SCHEME="https://$JFROG_URL"
-        else
-          JFROG_URL_WITH_SCHEME="$JFROG_URL"
-        fi
+  #       # For API connections, ensure URL has https:// prefix
+  #       if [[ $JFROG_URL != http://* ]] && [[ $JFROG_URL != https://* ]]; then
+  #         JFROG_URL_WITH_SCHEME="https://$JFROG_URL"
+  #       else
+  #         JFROG_URL_WITH_SCHEME="$JFROG_URL"
+  #       fi
         
-        # For Docker tags, we need the URL without the scheme
-        JFROG_URL_NO_SCHEME=$(echo "$JFROG_URL_WITH_SCHEME" | sed 's|^https://||' | sed 's|^http://||')
+  #       # For Docker tags, we need the URL without the scheme
+  #       JFROG_URL_NO_SCHEME=$(echo "$JFROG_URL_WITH_SCHEME" | sed 's|^https://||' | sed 's|^http://||')
         
-        echo "JFROG_URL_WITH_SCHEME=$JFROG_URL_WITH_SCHEME" >> $GITHUB_ENV
-        echo "JFROG_URL_NO_SCHEME=$JFROG_URL_NO_SCHEME" >> $GITHUB_ENV
+  #       echo "JFROG_URL_WITH_SCHEME=$JFROG_URL_WITH_SCHEME" >> $GITHUB_ENV
+  #       echo "JFROG_URL_NO_SCHEME=$JFROG_URL_NO_SCHEME" >> $GITHUB_ENV
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+  #   - name: Set up Docker Buildx
+  #     uses: docker/setup-buildx-action@v3
 
-    - name: Login to JFrog
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.JFROG_URL_NO_SCHEME }}
-        username: ${{ secrets.JFROG_USERNAME }}
-        password: ${{ secrets.JFROG_ACCESS_TOKEN }}
+  #   - name: Login to JFrog
+  #     uses: docker/login-action@v3
+  #     with:
+  #       registry: ${{ env.JFROG_URL_NO_SCHEME }}
+  #       username: ${{ secrets.JFROG_USERNAME }}
+  #       password: ${{ secrets.JFROG_ACCESS_TOKEN }}
 
-    - name: Build and push API image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./api
-        push: true
-        tags: |
-          ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-api:${{ github.run_number }}
-          ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
+  #   - name: Build and push API image
+  #     uses: docker/build-push-action@v5
+  #     with:
+  #       context: ./api
+  #       push: true
+  #       tags: |
+  #         ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-api:${{ github.run_number }}
+  #         ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
 
   deploy-infrastructure:
-    needs: [build-and-train, build-and-push-frontend, build-and-push-api]
+    needs: [build-and-train]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
