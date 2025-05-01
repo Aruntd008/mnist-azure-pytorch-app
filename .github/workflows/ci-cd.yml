@@ -13,7 +13,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    # Add outputs section to make ACI_ENDPOINT available to other jobs
     outputs:
       aci_endpoint: ${{ steps.set-outputs.outputs.aci_endpoint }}
 
@@ -29,7 +28,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install azure-ai-ml azure-identity
-        pip install -r model/requirements.txt
+
+    # - name: Install Python Dependencies
+    #   run: |
+    #     pip install -r model/requirements.txt
 
     - name: 'Az CLI login with OIDC'
       uses: azure/login@v2
@@ -67,7 +69,6 @@ jobs:
     #     # Get the ACI endpoint URL and set it as an environment variable
     #     echo "ACI_ENDPOINT=$(python -c 'import json; print(json.load(open("model/endpoint_info.json"))["scoring_uri"])')" >> $GITHUB_ENV
 
-    # New step to set the output variable for other jobs
     - name: Set outputs
       id: set-outputs
       run: |
@@ -80,17 +81,33 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # Add step to ensure JFrog URL has https:// prefix
+    - name: Set JFrog URL with scheme
+      id: set-jfrog-url
+      run: |
+        # Extract the JFrog URL and ensure it has https:// prefix
+        JFROG_URL="${{ secrets.JFROG_URL }}"
+        if [[ $JFROG_URL != http://* ]] && [[ $JFROG_URL != https://* ]]; then
+          JFROG_URL="https://$JFROG_URL"
+        fi
+        echo "JFROG_URL_WITH_SCHEME=$JFROG_URL" >> $GITHUB_ENV
+        echo "jfrog_url_with_scheme=$JFROG_URL" >> $GITHUB_OUTPUT
+
     - name: Setup JFrog CLI
       uses: jfrog/setup-jfrog-cli@v4
       env:
-        JF_URL: ${{ secrets.JFROG_URL }}
+        JF_URL: ${{ env.JFROG_URL_WITH_SCHEME }}
         JF_ACCESS_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
 
     - name: Build, Tag and Push Frontend Image
       env:
-        IMAGE_NAME: ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-frontend:${{ github.run_number }}
-        LATEST_TAG: ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-frontend:latest
+        IMAGE_NAME: ${{ env.JFROG_URL_WITH_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-frontend:${{ github.run_number }}
+        LATEST_TAG: ${{ env.JFROG_URL_WITH_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-frontend:latest
       run: |
+        # Print the URLs being used (masked for security)
+        echo "Building and pushing to repository: ${{ secrets.JFROG_REPO }}"
+        
+        # Build and push the image
         jf docker build -t $IMAGE_NAME -t $LATEST_TAG ./frontend
         jf docker push $IMAGE_NAME
         jf docker push $LATEST_TAG
@@ -111,13 +128,25 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # Add step to ensure JFrog URL has https:// prefix
+    - name: Set JFrog URL with scheme
+      id: set-jfrog-url
+      run: |
+        # Extract the JFrog URL and ensure it has https:// prefix
+        JFROG_URL="${{ secrets.JFROG_URL }}"
+        if [[ $JFROG_URL != http://* ]] && [[ $JFROG_URL != https://* ]]; then
+          JFROG_URL="https://$JFROG_URL"
+        fi
+        echo "JFROG_URL_WITH_SCHEME=$JFROG_URL" >> $GITHUB_ENV
+        echo "jfrog_url_with_scheme=$JFROG_URL" >> $GITHUB_OUTPUT
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
     - name: Login to JFrog
       uses: docker/login-action@v3
       with:
-        registry: ${{ secrets.JFROG_URL }}
+        registry: ${{ env.JFROG_URL_WITH_SCHEME }}
         username: ${{ secrets.JFROG_USERNAME }}
         password: ${{ secrets.JFROG_ACCESS_TOKEN }}
 
@@ -127,8 +156,8 @@ jobs:
         context: ./api
         push: true
         tags: |
-          ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-api:${{ github.run_number }}
-          ${{ secrets.JFROG_URL }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
+          ${{ env.JFROG_URL_WITH_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-api:${{ github.run_number }}
+          ${{ env.JFROG_URL_WITH_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
 
   deploy-infrastructure:
     needs: [build-and-train, build-and-push-frontend, build-and-push-api]
@@ -139,6 +168,18 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    # Add step to ensure JFrog URL has https:// prefix
+    - name: Set JFrog URL with scheme
+      id: set-jfrog-url
+      run: |
+        # Extract the JFrog URL and ensure it has https:// prefix
+        JFROG_URL="${{ secrets.JFROG_URL }}"
+        if [[ $JFROG_URL != http://* ]] && [[ $JFROG_URL != https://* ]]; then
+          JFROG_URL="https://$JFROG_URL"
+        fi
+        echo "JFROG_URL_WITH_SCHEME=$JFROG_URL" >> $GITHUB_ENV
+        echo "jfrog_url_with_scheme=$JFROG_URL" >> $GITHUB_OUTPUT
 
     - name: Set up Terraform
       uses: hashicorp/setup-terraform@v3
@@ -164,7 +205,7 @@ jobs:
       run: |
         cd infrastructure
         terraform plan -out=tfplan \
-          -var="jfrog_url=${{ secrets.JFROG_URL }}" \
+          -var="jfrog_url=${{ env.JFROG_URL_WITH_SCHEME }}" \
           -var="jfrog_username=${{ secrets.JFROG_USERNAME }}" \
           -var="jfrog_password=${{ secrets.JFROG_ACCESS_TOKEN }}" \
           -var="jfrog_repo=${{ secrets.JFROG_REPO }}" \
