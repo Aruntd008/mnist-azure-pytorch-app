@@ -183,7 +183,7 @@ jobs:
           ${{ env.JFROG_URL_NO_SCHEME }}/${{ secrets.JFROG_REPO }}/mnist-api:latest
 
   deploy-infrastructure:
-    needs: [build-and-train]
+    needs: [build-and-train, build-and-push-frontend, build-and-push-api]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
